@@ -1,34 +1,60 @@
-# This is a basic workflow to help you get started with Actions
+name: "CI Tests"
 
-name: CI
-
-# Controls when the action will run. 
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
-  push:
-  pull_request:
+    pull_request:
+    push:
 
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
-    # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    tests:
+        name: PHPUnit Tests
+        runs-on: ubuntu-latest
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+        strategy:
+            matrix:
+                - deps: low
+                  php: 5.6
+                  symfony: 3.4
+                - deps: normal
+                  php: 7.2
+                  symfony: 4.4
+                - deps: normal
+                  php: 7.3
+                  symfony: 5.1
+                - deps: normal
+                  php: 7.4
+                  symfony: 5.2
+                - deps: normal
+                  php: 8.0
+                  symfony: 5.x-dev
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+        steps:
+            - name: "Checkout"
+              uses: "actions/checkout@v2"
+              with:
+                  fetch-depth: 2
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+            - name: "Install PHP"
+              uses: "shivammathur/setup-php@v2"
+              with:
+                  php: "${{ matrix.php }}"
+
+            - name: "Cache composer packages"
+              uses: "actions/cache@v2"
+              with:
+                  path: "~/.composer/cache"
+                  key: "php-${{ matrix.php }}-composer-locked-${{ hashFiles('composer.lock') }}"
+                  restore-keys: "php-${{ matrix.php }}-composer-locked-"
+
+            - name: "Install Symfony"
+              run: "composer require symfony/symfony:${{ matrix.symfony }} --no-update"
+
+            - name: "Install dependencies with composer"
+              run: "composer update --no-interaction --prefer-stable"
+              if: "${{ matrix.deps == 'normal' }}"
+
+            - name: "Install lowest possible dependencies with composer"
+              run: "composer update --no-interaction --prefer-dist --prefer-stable --prefer-lowest"
+              if: "${{ matrix.deps == 'low' }} "
+
+            - name: "Run PHPUnit"
+              run: "composer test"
